@@ -1,0 +1,104 @@
+{
+  "name": "deskfall",
+  "productName": "Deskfall",
+  "version": "1.0.0",
+  "description": "Snow falls on your desktop and piles up on your windows and taskbar, with holiday lights, a snowplow and snowmen you build with your mouse.",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node scripts/build.mjs && electron .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dist": "node scripts/build.mjs --production && electron-builder --publish never",
+    "release": "node scripts/build.mjs --production && electron-builder --publish always"
+  },
+  "keywords": [
+    "snow",
+    "desktop",
+    "christmas",
+    "new-year",
+    "winter",
+    "overlay",
+    "electron",
+    "snowman"
+  ],
+  "author": "biyusku <biyusku@users.noreply.github.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/biyusku/deskfall#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/biyusku/deskfall.git"
+  },
+  "bugs": {
+    "url": "https://github.com/biyusku/deskfall/issues"
+  },
+  "type": "commonjs",
+  "build": {
+    "appId": "com.deskfall.app",
+    "productName": "Deskfall",
+    "icon": "build/icon.png",
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "dist/helper/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "biyusku",
+      "repo": "deskfall",
+      "releaseType": "release"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "runAfterFinish": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
+    },
+    "mac": {
+      "category": "public.app-category.entertainment",
+      "identity": null,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "extendInfo": {
+        "LSUIElement": true
+      },
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "linux": {
+      "category": "Utility",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "artifactName": "${productName}-${version}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "electron": "^45.3.1",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
