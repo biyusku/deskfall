@@ -7,6 +7,9 @@ snowballs and build snowmen with your mouse.
 Deskfall is free and open source (MIT). It is a transparent, click-through overlay: you keep
 using your computer normally while it snows.
 
+🌐 **[Try it live in your browser](https://deskfall-site-production-5925cd66.up.railway.app)** — the website runs the
+same snow engine on a pretend desktop.
+
 > 🇹🇷 **Türkçe:** Deskfall masaüstünüze kar yağdırır. Kar pencerelerin ve görev çubuğunun
 > üstünde birikir, pencerelerde yılbaşı ışıkları yanar, minik bir kar küreme aracı görev
 > çubuğunu temizler, fareyle kartopu yuvarlayıp kardan adam yapabilirsiniz. Menü, sistem dili
