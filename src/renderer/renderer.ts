@@ -1,8 +1,7 @@
 import { DEFAULT_SETTINGS, type DesktopState, type DeskfallBridge, type OverlayCommand, type Rect, type Settings } from '../shared/types';
-import { touchedPiles } from './brush';
+import { brushSnow, flingVelocity } from './brush';
 import { FLAKES, LAYER, SWIPE, WIND } from './config';
 import { drawSnowCap } from './draw-snow';
-import { clamp } from './geometry';
 import { FlakeField, windAt } from './flakes';
 import { drawGarland } from './garland';
 import { Particles } from './particles';
@@ -178,15 +177,17 @@ class Overlay {
     this.updateInteractive(x, y);
   }
 
-  /** Touching a window's snow — even gently — knocks the whole pile off, thrown the way you moved. */
+  /** Snow the cursor passes through — even slowly — is cleared and flung the way the cursor moves. */
   private swipe(x: number, y: number, now: number): void {
     if (this.snowmen.busy) return;
     const last = this.lastPointer.t > 0 ? this.lastPointer : null;
-    const touched = touchedPiles(this.surfaces.windows, last, { x, y });
-    if (touched.length === 0) return;
-    const dt = last ? Math.max(1, now - last.t) : 16;
-    const throwX = last ? clamp(((x - last.x) / dt) * SWIPE.throwFactor, -SWIPE.maxThrow, SWIPE.maxThrow) : 0;
-    for (const s of touched) this.particles.shed({ rect: { ...s.rect }, layer: s.layer, vx: throwX, sourceId: s.id });
+    const hits = brushSnow(this.surfaces.windows, last, { x, y });
+    if (hits.length === 0) return;
+    const { vx, vy } = flingVelocity(last, { x, y }, now);
+    for (const hit of hits) {
+      const chunks = Math.max(1, Math.ceil(hit.removed / SWIPE.volumePerChunk));
+      this.particles.burst(hit.x, hit.y, vx, vy, chunks, hit.sourceId);
+    }
   }
 
   /** The plow can be clicked away unless you're in the middle of rolling/carrying a snowball. */

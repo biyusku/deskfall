@@ -106,8 +106,10 @@ export const SNOWMAN = {
   waveDistance: 110,
 } as const;
 
-/** Touching a window's snow with the cursor knocks the whole pile off. */
+/** Brushing snow off windows: only where the cursor passes, flung the way it moves. */
 export const SWIPE = {
+  /** Half-width (px) of the path cleared around the cursor. */
+  radius: 14,
   /** Extra px around the pile that still counts as touching it. */
   padding: 4,
   minHeight: 0.5,
@@ -115,8 +117,12 @@ export const SWIPE = {
   sampleStep: 6,
   /** Longer jumps (e.g. coming from another screen) only brush at the end point. */
   maxSegment: 250,
-  /** Cursor speed (px/ms) → sideways throw of the falling snow (px/s). */
-  throwFactor: 900,
-  /** Cap on that sideways throw (px/s). */
-  maxThrow: 1400,
+  /** Cursor speed (px/ms) → speed the brushed snow is flung at (px/s). */
+  throwFactor: 700,
+  /** Even a slow brush flings the snow at least this fast, in the cursor's direction (px/s). */
+  minThrow: 140,
+  /** Cap on the fling speed (px/s). */
+  maxThrow: 1300,
+  /** Volume of snow per flung chunk. */
+  volumePerChunk: 2,
 } as const;

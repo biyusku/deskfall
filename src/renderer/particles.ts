@@ -62,9 +62,17 @@ export class Particles {
     layer.clear();
   }
 
-  burst(x: number, y: number, vx: number, vy: number, count: number): void {
+  /** Chunks flung from one spot; `skipId` is the window they came off (they won't land back on it). */
+  burst(x: number, y: number, vx: number, vy: number, count: number, skipId: string | null = null): void {
     for (let k = 0; k < count; k++) {
-      this.addCrumb({ x: x + rand(-4, 4), y: y + rand(-3, 3), vx: vx + rand(-50, 50), vy: vy + rand(-120, 0), r: rand(1, 2.6), skipId: null });
+      this.addCrumb({
+        x: x + rand(-4, 4),
+        y: y + rand(-3, 3),
+        vx: vx * rand(0.75, 1.15) + rand(-30, 30),
+        vy: vy * rand(0.75, 1.15) + rand(-60, 0),
+        r: rand(1, 2.6),
+        skipId,
+      });
     }
   }
 

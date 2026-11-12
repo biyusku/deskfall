@@ -45,13 +45,29 @@ describe('SnowLayer', () => {
     expect(layer.heightAt(15)).toBeCloseTo(2, 5);
   });
 
-  it('relax limits slopes between neighbouring columns', () => {
+  it('relax limits slopes between neighbouring snowy columns', () => {
+    // Arrange: a thin even layer with one tall spike on it.
     const layer = new SnowLayer(60, OPTS);
+    for (let x = -6; x <= 66; x += 1) layer.deposit(x, 0.5);
     layer.deposit(30, 8);
+    // Act
     for (let k = 0; k < 50; k++) layer.relax();
+    // Assert
     for (let i = 0; i + 1 < layer.columns; i++) {
       expect(Math.abs(layer.heightOf(i) - layer.heightOf(i + 1))).toBeLessThanOrEqual(OPTS.maxSlope + 1e-3);
     }
+  });
+
+  it('should_keep_a_brushed_gap_clear_when_snow_relaxes_for_a_long_time', () => {
+    // Arrange: a deep even layer, then a gap cleared in the middle.
+    const layer = new SnowLayer(90, OPTS);
+    for (let k = 0; k < 40; k++) for (let x = -6; x <= 96; x += 1) layer.deposit(x, 1);
+    layer.take(36, 54, 0);
+    // Act: ten seconds of relaxing at 30 fps.
+    for (let k = 0; k < 300; k++) layer.relax();
+    // Assert: the middle of the gap stayed bare, the snow beside it stayed put.
+    expect(layer.heightAt(45)).toBe(0);
+    expect(layer.heightAt(15)).toBeGreaterThan(5);
   });
 
   it('resize keeps snow and clamps to new capacity', () => {

@@ -10,6 +10,8 @@ export interface LayerOptions {
 
 const NEIGHBOR_SHARE = 0.5;
 const SPILL_JITTER = 0.15;
+/** Columns below this height count as bare ground that snow does not slide into. */
+const BARE_HEIGHT = 0.3;
 
 /**
  * Column height map of snow lying on a horizontal edge. Local x runs from
@@ -89,15 +91,19 @@ export class SnowLayer {
     return removed;
   }
 
-  /** Lets steep steps slump sideways so piles look like snow, not spikes. */
+  /**
+   * Lets steep steps slump sideways so piles look like snow, not spikes. Snow never slides into a
+   * bare spot, so a path brushed clear (or ploughed) stays clear instead of silently refilling.
+   */
   relax(): void {
     const h = this.heights;
     const slope = this.opts.maxSlope;
     for (let i = 0; i + 1 < h.length; i++) {
       const diff = h[i] - h[i + 1];
       if (Math.abs(diff) <= slope) continue;
-      const move = (Math.abs(diff) - slope) / 2;
       const [hi, lo] = diff > 0 ? [i, i + 1] : [i + 1, i];
+      if (h[lo] < BARE_HEIGHT) continue;
+      const move = (Math.abs(diff) - slope) / 2;
       const room = Math.max(0, this.capacity[lo] - h[lo]);
       const moved = Math.min(move, room);
       h[hi] -= move;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DesktopState } from '../src/shared/types';
-import { touchedPiles } from '../src/renderer/brush';
+import { brushSnow, flingVelocity } from '../src/renderer/brush';
 import { Particles } from '../src/renderer/particles';
 import { SurfaceSet } from '../src/renderer/surfaces';
 
@@ -23,54 +23,80 @@ function snowyWindows(): SurfaceSet {
   return set;
 }
 
-describe('touchedPiles', () => {
-  it('should_knock_the_whole_pile_off_when_the_cursor_gently_touches_it', () => {
+describe('brushSnow', () => {
+  it('should_clear_only_the_spot_under_the_cursor_when_it_moves_slowly_through_the_pile', () => {
     // Arrange
     const set = snowyWindows();
-    const [a, b] = set.windows;
-    // Act: a 2px move inside window a's pile, then the caller sheds it.
-    const touched = touchedPiles(set.windows, { x: 698, y: TOP - 3 }, { x: 700, y: TOP - 3 });
-    touched.forEach((s) => new Particles().shed({ rect: s.rect, layer: s.layer, vx: 0 }));
-    // Assert: all of a's snow is gone, b is untouched.
-    expect(touched).toEqual([a]);
-    expect(a.layer.totalVolume()).toBe(0);
-    expect(b.layer.totalVolume()).toBeGreaterThan(0);
+    const layer = set.windows[0].layer;
+    const elsewhere = layer.heightAt(400 - 300);
+    // Act: a gentle 2px move inside the pile.
+    const hits = brushSnow(set.windows, { x: 698, y: TOP - 3 }, { x: 700, y: TOP - 3 });
+    // Assert: snow under the cursor is gone, snow elsewhere is untouched.
+    expect(elsewhere).toBeGreaterThan(5);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0].sourceId).toBe('a');
+    expect(layer.heightAt(700 - 300)).toBe(0);
+    expect(layer.heightAt(400 - 300)).toBeCloseTo(elsewhere);
   });
 
-  it('should_let_the_knocked_off_snow_fall_past_its_window_when_it_comes_down', () => {
-    // Arrange: knock window a's pile off.
+  it('should_clear_the_whole_path_when_the_cursor_sweeps_along_the_top', () => {
     const set = snowyWindows();
-    const [a] = set.windows;
-    const fx = new Particles();
-    fx.shed({ rect: a.rect, layer: a.layer, vx: 0, sourceId: a.id });
-    expect(fx.crumbCount).toBeGreaterThan(0);
-    // Act: let the chunks fall for 3 seconds.
-    for (let t = 0; t < 3; t += 0.016) fx.update(0.016, set, DISPLAY.height, true);
-    // Assert: none of it landed back on window a; it ended up on the taskbar.
-    expect(a.layer.totalVolume()).toBe(0);
-    expect(set.floor?.layer.totalVolume()).toBeGreaterThan(0);
-  });
-
-  it('should_touch_every_pile_crossed_when_the_cursor_sweeps_across_two_windows', () => {
-    const set = snowyWindows();
-    const touched = touchedPiles(set.windows, { x: 1000, y: TOP - 3 }, { x: 1220, y: TOP + 97 });
-    expect(touched.map((s) => s.id).sort()).toEqual(['a', 'b']);
+    const layer = set.windows[0].layer;
+    brushSnow(set.windows, { x: 400, y: TOP - 2 }, { x: 600, y: TOP - 2 });
+    for (let x = 400; x <= 600; x += 10) expect(layer.heightAt(x - 300)).toBe(0);
+    expect(layer.heightAt(800 - 300)).toBeGreaterThan(5);
   });
 
   it('should_not_touch_the_snow_when_the_cursor_is_inside_the_window', () => {
     const set = snowyWindows();
-    expect(touchedPiles(set.windows, { x: 500, y: TOP + 40 }, { x: 600, y: TOP + 40 })).toEqual([]);
+    const before = set.windows[0].layer.totalVolume();
+    expect(brushSnow(set.windows, { x: 500, y: TOP + 40 }, { x: 600, y: TOP + 40 })).toEqual([]);
+    expect(set.windows[0].layer.totalVolume()).toBe(before);
   });
 
-  it('should_ignore_the_long_jump_when_the_cursor_comes_from_far_away', () => {
+  it('should_only_brush_the_end_point_when_the_cursor_jumps_far', () => {
     const set = snowyWindows();
-    // Coming from another screen: only the end point counts, and it is in empty space.
-    expect(touchedPiles(set.windows, { x: -2000, y: TOP - 2 }, { x: 150, y: TOP - 2 })).toEqual([]);
+    const layer = set.windows[0].layer;
+    brushSnow(set.windows, { x: -2000, y: TOP - 2 }, { x: 900, y: TOP - 2 });
+    expect(layer.heightAt(900 - 300)).toBe(0);
+    expect(layer.heightAt(500 - 300)).toBeGreaterThan(5);
   });
 
-  it('should_not_touch_a_window_that_has_no_snow', () => {
+  it('should_let_brushed_snow_fly_off_without_landing_back_on_its_window', () => {
+    // Arrange: brush a spot and fling it right, like the renderer does.
     const set = snowyWindows();
-    set.windows[0].layer.clear();
-    expect(touchedPiles(set.windows, null, { x: 700, y: TOP - 2 })).toEqual([]);
+    const [a] = set.windows;
+    const before = a.layer.totalVolume();
+    const fx = new Particles();
+    const hits = brushSnow(set.windows, { x: 690, y: TOP - 3 }, { x: 700, y: TOP - 3 });
+    const removed = before - a.layer.totalVolume();
+    const v = flingVelocity({ x: 690, y: TOP - 3, t: 0 }, { x: 700, y: TOP - 3 }, 10);
+    hits.forEach((h) => fx.burst(h.x, h.y, v.vx, v.vy, 20, h.sourceId));
+    // Act: three seconds of falling.
+    for (let t = 0; t < 3; t += 0.016) fx.update(0.016, set, DISPLAY.height, true);
+    // Assert: window a only lost snow, it got none back.
+    expect(removed).toBeGreaterThan(0);
+    expect(a.layer.totalVolume()).toBeCloseTo(before - removed);
+  });
+});
+
+describe('flingVelocity', () => {
+  it('should_fling_in_the_direction_the_cursor_moves', () => {
+    const right = flingVelocity({ x: 100, y: 100, t: 0 }, { x: 110, y: 100 }, 16);
+    const left = flingVelocity({ x: 100, y: 100, t: 0 }, { x: 90, y: 100 }, 16);
+    expect(right.vx).toBeGreaterThan(0);
+    expect(left.vx).toBeLessThan(0);
+    expect(right.vy).toBeLessThan(0);
+  });
+
+  it('should_fling_at_least_a_little_when_the_cursor_moves_very_slowly', () => {
+    const v = flingVelocity({ x: 100, y: 100, t: 0 }, { x: 101, y: 100 }, 1000);
+    expect(v.vx).toBeGreaterThanOrEqual(140 - 1e-9);
+  });
+
+  it('should_pop_snow_upward_when_there_is_no_previous_position', () => {
+    const v = flingVelocity(null, { x: 100, y: 100 }, 0);
+    expect(v.vx).toBe(0);
+    expect(v.vy).toBeLessThan(0);
   });
 });
