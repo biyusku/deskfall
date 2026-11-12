@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS, type DesktopState, type DeskfallBridge, type OverlayCommand, type Rect, type Settings } from '../shared/types';
-import { brushSnow } from './brush';
+import { touchedPiles } from './brush';
 import { FLAKES, LAYER, SWIPE, WIND } from './config';
 import { drawSnowCap } from './draw-snow';
 import { clamp } from './geometry';
@@ -118,7 +118,7 @@ class Overlay {
       this.surfaces.forEachLayer((s) => s.layer.clear());
       this.snowmen.clear();
     } else if (command === 'shake-all') {
-      this.surfaces.windows.forEach((s) => this.particles.shed({ rect: s.rect, layer: s.layer, vx: 0 }));
+      this.surfaces.windows.forEach((s) => this.particles.shed({ rect: s.rect, layer: s.layer, vx: 0, sourceId: s.id }));
     } else if (command === 'call-plow' && this.surfaces.floor) {
       this.plow.start(this.surfaces.floor);
     }
@@ -178,17 +178,15 @@ class Overlay {
     this.updateInteractive(x, y);
   }
 
-  /** Passing the cursor through a window's snow — even slowly — brushes it off. */
+  /** Touching a window's snow — even gently — knocks the whole pile off, thrown the way you moved. */
   private swipe(x: number, y: number, now: number): void {
     if (this.snowmen.busy) return;
     const last = this.lastPointer.t > 0 ? this.lastPointer : null;
-    const hits = brushSnow(this.surfaces.windows, last, { x, y });
-    if (hits.length === 0) return;
+    const touched = touchedPiles(this.surfaces.windows, last, { x, y });
+    if (touched.length === 0) return;
     const dt = last ? Math.max(1, now - last.t) : 16;
-    const vx = last ? clamp((x - last.x) / dt, -2, 2) : 0;
-    for (const hit of hits) {
-      this.particles.burst(hit.x, hit.y, vx * SWIPE.throwFactor, -40, Math.max(1, Math.ceil(hit.removed / 2.5)));
-    }
+    const throwX = last ? clamp(((x - last.x) / dt) * SWIPE.throwFactor, -SWIPE.maxThrow, SWIPE.maxThrow) : 0;
+    for (const s of touched) this.particles.shed({ rect: { ...s.rect }, layer: s.layer, vx: throwX, sourceId: s.id });
   }
 
   /** The plow can be clicked away unless you're in the middle of rolling/carrying a snowball. */

@@ -8,6 +8,8 @@ interface Crumb {
   vx: number;
   vy: number;
   r: number;
+  /** Surface the chunk was knocked off; it must not land back on it. */
+  skipId: string | null;
 }
 
 interface Sparkle {
@@ -47,7 +49,14 @@ export class Particles {
       if (h < 0.4) continue;
       const count = Math.min(MAX_CRUMBS_PER_COLUMN, Math.ceil(h / CRUMB_VOLUME_PER_HEIGHT));
       for (let k = 0; k < count; k++) {
-        this.addCrumb(rect.x + layer.columnX(i) + rand(-1, 1), rect.y - rand(0, h), event.vx * 0.25 + rand(-30, 30), rand(-90, 10), rand(1.2, 2.6));
+        this.addCrumb({
+          x: rect.x + layer.columnX(i) + rand(-1, 1),
+          y: rect.y - rand(0, h),
+          vx: event.vx * 0.25 + rand(-30, 30),
+          vy: rand(-90, 10),
+          r: rand(1.2, 2.6),
+          skipId: event.sourceId ?? null,
+        });
       }
     }
     layer.clear();
@@ -55,8 +64,12 @@ export class Particles {
 
   burst(x: number, y: number, vx: number, vy: number, count: number): void {
     for (let k = 0; k < count; k++) {
-      this.addCrumb(x + rand(-4, 4), y + rand(-3, 3), vx + rand(-50, 50), vy + rand(-120, 0), rand(1, 2.6));
+      this.addCrumb({ x: x + rand(-4, 4), y: y + rand(-3, 3), vx: vx + rand(-50, 50), vy: vy + rand(-120, 0), r: rand(1, 2.6), skipId: null });
     }
+  }
+
+  get crumbCount(): number {
+    return this.crumbs.length;
   }
 
   sparkle(x: number, y: number, count: number): void {
@@ -80,7 +93,7 @@ export class Particles {
       c.y += c.vy * dt;
       c.vx *= 1 - Math.min(1, dt * 0.8);
       if (c.vy > 0) {
-        const s = surfaces.findLanding(c.x, y0, c.y);
+        const s = surfaces.findLanding(c.x, y0, c.y, c.skipId);
         if (s) {
           if (accumulate) s.layer.deposit(c.x - s.rect.x, c.r * CRUMBS.depositPerRadius);
           return false;
@@ -133,8 +146,8 @@ export class Particles {
     ctx.globalAlpha = 1;
   }
 
-  private addCrumb(x: number, y: number, vx: number, vy: number, r: number): void {
+  private addCrumb(crumb: Crumb): void {
     if (this.crumbs.length >= CRUMBS.max) return;
-    this.crumbs.push({ x, y, vx, vy, r });
+    this.crumbs.push(crumb);
   }
 }

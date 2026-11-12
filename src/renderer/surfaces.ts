@@ -22,6 +22,8 @@ export interface ShedEvent {
   rect: Rect;
   layer: SnowLayer;
   vx: number;
+  /** Window the snow came off; its chunks never land back on it. */
+  sourceId?: string;
 }
 
 const BAR_ID = '__bar__';
@@ -89,9 +91,9 @@ export class SurfaceSet {
   }
 
   /** Finds the surface a particle moving from y0 to y1 at x lands on, if any. */
-  findLanding(x: number, y0: number, y1: number): Surface | null {
+  findLanding(x: number, y0: number, y1: number, skipId: string | null = null): Surface | null {
     for (const s of this.landingOrder()) {
-      if (!s.collects) continue;
+      if (!s.collects || s.id === skipId) continue;
       const lx = x - s.rect.x;
       if (lx < -s.layer.overhang || lx > s.rect.width + s.layer.overhang) continue;
       const surfaceY = s.rect.y - s.layer.heightAt(lx);
@@ -115,7 +117,7 @@ export class SurfaceSet {
     const distance = Math.hypot(dx, dy);
     const isFastMove = distance / dt > CRUMBS.shedSpeed || distance > CRUMBS.shedDistance;
     if (sheds && distance > 0 && isFastMove && old.layer.totalVolume() > 0) {
-      sheds.push({ rect: { ...old.rect }, layer: old.layer, vx: dx / dt });
+      sheds.push({ rect: { ...old.rect }, layer: old.layer, vx: dx / dt, sourceId: id });
       old.layer = new SnowLayer(old.rect.width, layerOptions('window'));
     }
     old.layer.resize(rect.width);
