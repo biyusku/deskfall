@@ -31,12 +31,7 @@ export function inIntervals(x: number, intervals: ReadonlyArray<Interval>): bool
  * Horizontal parts of a surface's top edge (at y = edgeY, from left to right) that are
  * not hidden behind any of the occluders (rectangles stacked above it).
  */
-export function visibleEdge(
-  left: number,
-  right: number,
-  edgeY: number,
-  occluders: ReadonlyArray<Rect>,
-): Interval[] {
+export function visibleEdge(left: number, right: number, edgeY: number, occluders: ReadonlyArray<Rect>): Interval[] {
   const cuts: Interval[] = [];
   for (const r of occluders) {
     if (r.y <= edgeY - 1 && r.y + r.height >= edgeY - 1) cuts.push({ start: r.x, end: r.x + r.width });

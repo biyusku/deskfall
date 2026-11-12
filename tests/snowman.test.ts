@@ -16,7 +16,14 @@ function snowyFloor(): Surface {
     maxSlope: 1.6,
   });
   for (let k = 0; k < 40; k++) for (let x = 0; x < 1920; x += 3) layer.deposit(x, 1);
-  return { id: 'bar', kind: 'bar', rect: { x: 0, y: BAR_Y, width: 1920, height: 48 }, layer, visible: [], collects: true };
+  return {
+    id: 'bar',
+    kind: 'bar',
+    rect: { x: 0, y: BAR_Y, width: 1920, height: 48 },
+    layer,
+    visible: [],
+    collects: true,
+  };
 }
 
 describe('easeOutBack', () => {

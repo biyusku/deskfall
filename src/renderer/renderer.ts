@@ -1,4 +1,11 @@
-import { DEFAULT_SETTINGS, type DesktopState, type DeskfallBridge, type OverlayCommand, type Rect, type Settings } from '../shared/types';
+import {
+  DEFAULT_SETTINGS,
+  type DesktopState,
+  type DeskfallBridge,
+  type OverlayCommand,
+  type Rect,
+  type Settings,
+} from '../shared/types';
 import { brushSnow, flingVelocity } from './brush';
 import { FLAKES, LAYER, SWIPE, WIND } from './config';
 import { drawSnowCap } from './draw-snow';
@@ -59,7 +66,14 @@ class Overlay {
     this.bindPointer();
     this.bindBridge();
     window.addEventListener('error', (e) => this.reportError(e.error ?? e.message));
+    window.addEventListener('unhandledrejection', (e) => this.reportError(e.reason));
     this.scheduleFrame();
+  }
+
+  /** Ends any snowball drag (dropping the ball where it is) and gives clicks back to the desktop. */
+  private releasePointer(): void {
+    if (this.snowmen.busy) this.snowmen.pointerUp(this.surfaces.floor, performance.now(), this.particles);
+    this.setInteractive(false);
   }
 
   private scheduleFrame(): void {
@@ -75,7 +89,8 @@ class Overlay {
     if (running === this.running) return;
     this.running = running;
     if (!running) {
-      this.setInteractive(false);
+      // Hidden mid-drag (shortcut, maximize): mouseup will never arrive, so finish the drag now.
+      this.releasePointer();
       return;
     }
     // Window changes that happened while paused (e.g. un-maximizing) must not shake snow off.
@@ -87,8 +102,8 @@ class Overlay {
   }
 
   private applyDesktop(state: DesktopState): void {
-    const now = performance.now();
-    const sheds = this.surfaces.update(state, this.display, now, now >= this.quietUntil);
+    const canShed = performance.now() >= this.quietUntil;
+    const sheds = this.surfaces.update(state, this.display, canShed);
     sheds.forEach((shed) => this.particles.shed(shed));
   }
 
@@ -117,7 +132,9 @@ class Overlay {
       this.surfaces.forEachLayer((s) => s.layer.clear());
       this.snowmen.clear();
     } else if (command === 'shake-all') {
-      this.surfaces.windows.forEach((s) => this.particles.shed({ rect: s.rect, layer: s.layer, vx: 0, sourceId: s.id }));
+      for (const s of this.surfaces.windows) {
+        this.particles.shed({ rect: s.rect, layer: s.layer, vx: 0, sourceId: s.id });
+      }
     } else if (command === 'call-plow' && this.surfaces.floor) {
       this.plow.start(this.surfaces.floor);
     }
@@ -143,7 +160,11 @@ class Overlay {
   // ----- pointer -----
 
   private bindPointer(): void {
-    window.addEventListener('mousemove', (e) => this.onMove(e.clientX, e.clientY));
+    window.addEventListener('mousemove', (e) => {
+      // Button already released outside our window (mouseup lost): finish any drag first.
+      if (e.buttons === 0 && this.snowmen.busy) this.releasePointer();
+      this.onMove(e.clientX, e.clientY);
+    });
     window.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
       const floor = this.surfaces.floor;
@@ -231,6 +252,8 @@ class Overlay {
     try {
       this.step(dt, time, now);
       this.draw(time, now);
+      // Things move under a resting cursor (the plow drives away, a ball lands): re-check what's clickable.
+      if (this.cursor) this.updateInteractive(this.cursor.x, this.cursor.y);
     } catch (err: unknown) {
       this.reportError(err);
       this.ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
@@ -249,28 +272,36 @@ class Overlay {
     const s = this.settings;
     const wind = windAt(time, WIND.base[s.wind], WIND.gust[s.wind]);
     const deposit = LAYER.flakeDeposit * FLAKES.depositScale[s.intensity];
-    this.flakes.step(dt, time, wind, (x, y0, y1, r) => {
-      const surface = this.surfaces.findLanding(x, y0, y1);
-      if (!surface) return false;
-      if (s.accumulate) surface.layer.deposit(x - surface.rect.x, deposit * (0.5 + r / FLAKES.maxRadius));
-      return true;
-    }, this.floorTop());
+    this.flakes.step(
+      dt,
+      time,
+      wind,
+      (x, y0, y1, r) => {
+        const surface = this.surfaces.findLanding(x, y0, y1);
+        if (!surface) return false;
+        if (s.accumulate) surface.layer.deposit(x - surface.rect.x, deposit * (0.5 + r / FLAKES.maxRadius));
+        return true;
+      },
+      this.floorTop(),
+    );
     const melting = !s.snowing || !s.accumulate;
     this.surfaces.forEachLayer((surface) => {
       surface.layer.relax();
       if (melting) surface.layer.melt(LAYER.meltPerSecond * dt);
     });
     this.particles.update(dt, this.surfaces, this.display.height, s.accumulate);
-    this.plow.update(dt, this.surfaces.floor, this.snowmen.obstacles(), s.plow, this.particles);
+    // Snowmen live in overlay x; the plow works in floor-relative x.
+    const floorX = this.surfaces.floor?.rect.x ?? 0;
+    const obstacles = this.snowmen.obstacles().map((o) => ({ start: o.start - floorX, end: o.end - floorX }));
+    this.plow.update(dt, this.surfaces.floor, obstacles, s.plow, this.particles);
     this.snowmen.update(dt, now, this.cursor);
   }
 
   private draw(time: number, now: number): void {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    // Bottom-most window first; each window erases whatever lies behind it.
-    // Falling snow first: each window below then erases the flakes behind it, so snow falls on
-    // the desktop and lands on window tops instead of drifting over tabs and content.
+    // Falling snow first; then windows bottom-most first, each erasing what lies behind it (flakes and
+    // lower windows' snow), so snow falls on the desktop and lands on window tops, not over content.
     this.aboveFloor(() => this.flakes.draw(ctx, this.sprites));
     for (let i = this.surfaces.windows.length - 1; i >= 0; i--) {
       const s = this.surfaces.windows[i];

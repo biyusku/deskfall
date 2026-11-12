@@ -10,9 +10,12 @@ describe('subtractIntervals', () => {
   });
 
   it('handles overlapping and covering cuts', () => {
-    expect(subtractIntervals({ start: 0, end: 100 }, [{ start: -10, end: 30 }, { start: 20, end: 50 }])).toEqual([
-      { start: 50, end: 100 },
-    ]);
+    expect(
+      subtractIntervals({ start: 0, end: 100 }, [
+        { start: -10, end: 30 },
+        { start: 20, end: 50 },
+      ]),
+    ).toEqual([{ start: 50, end: 100 }]);
     expect(subtractIntervals({ start: 0, end: 100 }, [{ start: -1, end: 200 }])).toEqual([]);
   });
 
@@ -43,7 +46,10 @@ describe('visibleEdge', () => {
 
 describe('inIntervals', () => {
   it('detects membership including bounds', () => {
-    const ivs = [{ start: 0, end: 10 }, { start: 20, end: 30 }];
+    const ivs = [
+      { start: 0, end: 10 },
+      { start: 20, end: 30 },
+    ];
     expect(inIntervals(10, ivs)).toBe(true);
     expect(inIntervals(15, ivs)).toBe(false);
   });

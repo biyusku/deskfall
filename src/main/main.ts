@@ -14,6 +14,12 @@ const REASSERT_TOP_MS = 2500;
 const FIRST_RUN_FLAG = 'welcomed';
 /** Only Windows has a native window tracker so far (see src/helper). */
 const HAS_WINDOW_TRACKER = process.platform === 'win32';
+const RECOVERY_WINDOW_MS = 60_000;
+/** More crashes than this within RECOVERY_WINDOW_MS and the overlay stays off. */
+const MAX_RECOVERIES = 3;
+/** Window tracker poll rate while some screen shows snow, and while every screen is paused. */
+const ACTIVE_POLL_MS = 33;
+const IDLE_POLL_MS = 250;
 
 interface Overlay {
   displayId: number;
@@ -26,6 +32,8 @@ interface Overlay {
   covered: boolean;
   /** Last running state sent to the renderer. */
   running: boolean | null;
+  /** Times (ms) the renderer crashed or hung recently. */
+  recoveries: number[];
 }
 
 const overlays = new Map<number, Overlay>();
@@ -104,15 +112,41 @@ function createOverlay(display: Display): Overlay {
     fullscreenHidden: false,
     covered: false,
     running: null,
+    recoveries: [],
   };
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setIgnoreMouseEvents(true, { forward: true });
   if (process.platform === 'darwin') win.setVisibleOnAllWorkspaces(true);
   win.setBounds(bounds);
-  win.loadFile(join(__dirname, 'renderer', 'index.html')).catch((err: unknown) => {
+  win.webContents.on('render-process-gone', (_event, details) => recoverOverlay(overlay, `gone: ${details.reason}`));
+  win.on('unresponsive', () => recoverOverlay(overlay, 'unresponsive'));
+  loadOverlay(overlay);
+  return overlay;
+}
+
+function loadOverlay(overlay: Overlay): void {
+  overlay.win.loadFile(join(__dirname, 'renderer', 'index.html')).catch((err: unknown) => {
     logger.error('overlay failed to load', err);
   });
-  return overlay;
+}
+
+/**
+ * A crashed or hung renderer must never leave a full-screen window that swallows clicks:
+ * make it click-through and hidden at once, then reload it (rate-limited so a renderer that keeps
+ * crashing stays off instead of looping).
+ */
+function recoverOverlay(overlay: Overlay, reason: string): void {
+  if (overlay.win.isDestroyed()) return;
+  overlay.win.setIgnoreMouseEvents(true, { forward: true });
+  overlay.win.hide();
+  overlay.ready = false;
+  overlay.running = null;
+  const now = Date.now();
+  overlay.recoveries = overlay.recoveries.filter((t) => now - t < RECOVERY_WINDOW_MS);
+  overlay.recoveries.push(now);
+  logger.error('overlay renderer failed', { display: overlay.displayId, reason, recent: overlay.recoveries.length });
+  if (overlay.recoveries.length > MAX_RECOVERIES) return;
+  loadOverlay(overlay);
 }
 
 function rebuildOverlays(): void {
@@ -134,7 +168,9 @@ function rebuildOverlays(): void {
     existing.win.setBounds(display.bounds);
     send(existing, IPC.init, { displayId: display.id, bounds: display.bounds });
   }
+  // Re-evaluate pause/fullscreen for new or resized displays right away, not on the next window change.
   if (!HAS_WINDOW_TRACKER) publishFallbackDesktop();
+  else if (lastDesktop) publishDesktop(lastDesktop, fullscreenIds);
 }
 
 function overlayFor(senderId: number): Overlay | undefined {
@@ -145,9 +181,12 @@ function displayInfos(): Array<{ id: number; bounds: Rect; workArea: Rect }> {
   return [...overlays.values()].map((o) => ({ id: o.displayId, bounds: o.bounds, workArea: o.workArea }));
 }
 
-/** Windows: live window layout from the native tracker. */
+/**
+ * Windows: live window layout from the native tracker. Stamped here, as it arrives, so the
+ * renderer measures window speed from real snapshot spacing rather than its own frame timing.
+ */
 function handleSnapshot(snapshot: RawSnapshot): void {
-  const state = toDesktopState(snapshot, toDip);
+  const state = toDesktopState(snapshot, toDip, performance.now());
   publishDesktop(state, fullscreenDisplays(snapshot, toDip, displayInfos()));
 }
 
@@ -156,7 +195,19 @@ function handleSnapshot(snapshot: RawSnapshot): void {
  * (Dock / panel). Snow falls and piles on that floor; windows don't collect snow.
  */
 function publishFallbackDesktop(): void {
-  publishDesktop({ windows: [], bars: barsFromWorkAreas(displayInfos()), foregroundId: '0' }, new Set());
+  const state = { windows: [], bars: barsFromWorkAreas(displayInfos()), foregroundId: '0', time: performance.now() };
+  publishDesktop(state, new Set());
+}
+
+/** Tracker runs only while snow is enabled, and polls slowly while every screen is paused. */
+function syncWatcher(): void {
+  if (!HAS_WINDOW_TRACKER) return;
+  if (!settings.enabled) {
+    watcher.stop();
+    return;
+  }
+  const anyShowing = [...overlays.values()].some(overlayVisible);
+  watcher.start(anyShowing ? ACTIVE_POLL_MS : IDLE_POLL_MS);
 }
 
 function publishDesktop(state: DesktopState, fullscreen: Set<number>): void {
@@ -173,6 +224,7 @@ function publishDesktop(state: DesktopState, fullscreen: Set<number>): void {
   all.filter((o) => !overlayVisible(o)).forEach(syncVisibility);
   broadcast(IPC.desktop, lastDesktop);
   all.filter((o) => overlayVisible(o)).forEach(syncVisibility);
+  syncWatcher();
 }
 
 function updateSettings(patch: Partial<Settings>): void {
@@ -183,6 +235,7 @@ function updateSettings(patch: Partial<Settings>): void {
   }
   broadcast(IPC.settings, settings);
   overlays.forEach(syncVisibility);
+  syncWatcher();
   tray?.refresh();
 }
 
@@ -203,7 +256,8 @@ function registerIpc(): void {
     syncVisibility(overlay);
   });
   ipcMain.on(IPC.error, (event, message: unknown) => {
-    if (typeof message === 'string') logger.error('renderer error', { display: overlayFor(event.sender.id)?.displayId, message });
+    if (typeof message !== 'string') return;
+    logger.error('renderer error', { display: overlayFor(event.sender.id)?.displayId, message });
   });
   ipcMain.on(IPC.interactive, (event, interactive: unknown) => {
     const overlay = overlayFor(event.sender.id);
@@ -244,7 +298,7 @@ async function start(): Promise<void> {
 
   if (HAS_WINDOW_TRACKER) {
     watcher.onSnapshot(handleSnapshot);
-    watcher.start();
+    syncWatcher();
   } else {
     publishFallbackDesktop();
   }

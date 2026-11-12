@@ -42,11 +42,11 @@ using your computer normally while it snows.
 Download the installer for your system from the
 [**latest release**](https://github.com/biyusku/deskfall/releases/latest):
 
-| System | File | Notes |
-|---|---|---|
-| **Windows** 10/11 | `Deskfall-Setup-x.y.z.exe` | One click, starts right away. Or use the portable `.exe`. |
-| **macOS** (Apple Silicon & Intel) | `Deskfall-x.y.z-*.dmg` | The app is not signed yet: the first time, right-click the app → **Open**. |
-| **Linux** | `Deskfall-x.y.z.AppImage` or `.deb` | AppImage: `chmod +x` it and run. Needs a compositing desktop for transparency. |
+| System                            | File                                | Notes                                                                          |
+| --------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------ |
+| **Windows** 10/11                 | `Deskfall-Setup-x.y.z.exe`          | One click, starts right away. Or use the portable `.exe`.                      |
+| **macOS** (Apple Silicon & Intel) | `Deskfall-x.y.z-*.dmg`              | The app is not signed yet: the first time, right-click the app → **Open**.     |
+| **Linux**                         | `Deskfall-x.y.z.AppImage` or `.deb` | AppImage: `chmod +x` it and run. Needs a compositing desktop for transparency. |
 
 Then look for the ❄️ snowflake in your system tray / menu bar.
 
@@ -59,13 +59,13 @@ Then look for the ❄️ snowflake in your system tray / menu bar.
 
 ## 🖥️ Platform support
 
-| Feature | Windows | macOS | Linux (X11) | Linux (Wayland) |
-|---|:-:|:-:|:-:|:-:|
-| Falling snow, wind, tray menu | ✅ | ✅ | ✅ | ✅ |
-| Snow piling on taskbar / Dock / panel, snowplow | ✅ | ✅ | ✅ | ✅ |
-| Snowmen (mouse play), clicking the plow | ✅ | ✅ | ⚠️ | ⚠️ |
-| Snow piling on windows, lights on windows | ✅ | 🚧 | 🚧 | ❌ |
-| Pause on maximized windows | ✅ | 🚧 | 🚧 | ❌ |
+| Feature                                         | Windows | macOS | Linux (X11) | Linux (Wayland) |
+| ----------------------------------------------- | :-----: | :---: | :---------: | :-------------: |
+| Falling snow, wind, tray menu                   |   ✅    |  ✅   |     ✅      |       ✅        |
+| Snow piling on taskbar / Dock / panel, snowplow |   ✅    |  ✅   |     ✅      |       ✅        |
+| Snowmen (mouse play), clicking the plow         |   ✅    |  ✅   |     ⚠️      |       ⚠️        |
+| Snow piling on windows, lights on windows       |   ✅    |  🚧   |     🚧      |       ❌        |
+| Pause on maximized windows                      |   ✅    |  🚧   |     🚧      |       ❌        |
 
 ✅ works · ⚠️ limited (Electron cannot forward mouse movement through click-through windows on
 Linux) · 🚧 planned: needs a native window tracker (see below) · ❌ Wayland does not let apps
@@ -87,23 +87,23 @@ npm run dist         # build an installer for your current OS into release/
 
 ### How it works
 
-| Part | Path | Role |
-|---|---|---|
-| Main process | `src/main/` | One transparent, always-on-top, click-through window per display; tray menu, settings, window tracking |
+| Part           | Path                     | Role                                                                                                        |
+| -------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Main process   | `src/main/`              | One transparent, always-on-top, click-through window per display; tray menu, settings, window tracking      |
 | Window tracker | `src/helper/winlist.ps1` | Windows only. A tiny PowerShell/C# helper that streams visible window rectangles and z-order as JSON lines. |
-| Renderer | `src/renderer/` | Canvas simulation |
+| Renderer       | `src/renderer/`          | Canvas simulation                                                                                           |
 
 The renderer is split into these modules:
 
-| File | What it does |
-|---|---|
-| `snow-layer.ts` | Height map of snow on an edge |
-| `surfaces.ts` | Which window edges are visible and where flakes land |
-| `flakes.ts` | Falling snow |
-| `plow.ts` | Snowplow |
-| `snowman.ts` | Snowballs and snowmen |
-| `garland.ts` | Holiday lights |
-| `draw-snow.ts` | Drawing the snow blankets |
+| File            | What it does                                         |
+| --------------- | ---------------------------------------------------- |
+| `snow-layer.ts` | Height map of snow on an edge                        |
+| `surfaces.ts`   | Which window edges are visible and where flakes land |
+| `flakes.ts`     | Falling snow                                         |
+| `plow.ts`       | Snowplow                                             |
+| `snowman.ts`    | Snowballs and snowmen                                |
+| `garland.ts`    | Holiday lights                                       |
+| `draw-snow.ts`  | Drawing the snow blankets                            |
 
 The overlay only becomes clickable while your cursor is over snow you can play with, or over the
 snowplow. Everything else passes straight through to the windows underneath.

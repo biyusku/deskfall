@@ -1,8 +1,12 @@
-import { appendFile } from 'node:fs';
+import { appendFileSync, renameSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { app } from 'electron';
 
 type Level = 'info' | 'warn' | 'error';
+
+const LOG_FILE = 'deskfall.log';
+const OLD_LOG_FILE = 'deskfall.old.log';
+const MAX_LOG_BYTES = 1024 * 1024;
 
 function format(level: Level, message: string, context?: unknown): string {
   const extra = context === undefined ? '' : ` ${describe(context)}`;
@@ -18,13 +22,28 @@ function describe(value: unknown): string {
   }
 }
 
+/** Moves `file` to `oldFile` once it passes `maxBytes`, so the log never grows without bound. */
+export function rotateIfLarge(file: string, oldFile: string, maxBytes: number): void {
+  try {
+    if (statSync(file).size > maxBytes) renameSync(file, oldFile);
+  } catch (err: unknown) {
+    const missing = typeof err === 'object' && err !== null && 'code' in err && err.code === 'ENOENT';
+    if (!missing) process.stderr.write(`log rotation failed: ${describe(err)}\n`);
+  }
+}
+
 function write(level: Level, message: string, context?: unknown): void {
   const line = format(level, message, context);
   process.stderr.write(line);
   if (!app.isReady()) return;
-  appendFile(join(app.getPath('userData'), 'deskfall.log'), line, (err) => {
-    if (err) process.stderr.write(`log write failed: ${err.message}\n`);
-  });
+  const dir = app.getPath('userData');
+  const file = join(dir, LOG_FILE);
+  rotateIfLarge(file, join(dir, OLD_LOG_FILE), MAX_LOG_BYTES);
+  try {
+    appendFileSync(file, line);
+  } catch (err: unknown) {
+    process.stderr.write(`log write failed: ${describe(err)}\n`);
+  }
 }
 
 export const logger = {

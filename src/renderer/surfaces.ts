@@ -29,6 +29,10 @@ export interface ShedEvent {
 const BAR_ID = '__bar__';
 const GROUND_ID = '__ground__';
 const MIN_TOP_FOR_SNOW = 3;
+/** Snapshot spacing used when there is no previous snapshot (treated as slow). */
+const MAX_SNAPSHOT_GAP_MS = 1000;
+/** Floor for snapshot spacing, so two snapshots stamped almost together can't look infinitely fast. */
+const MIN_SNAPSHOT_GAP_MS = 10;
 
 function layerOptions(kind: SurfaceKind): LayerOptions {
   const maxHeight = { window: LAYER.windowMaxHeight, bar: LAYER.barMaxHeight, ground: LAYER.groundMaxHeight }[kind];
@@ -52,16 +56,21 @@ export class SurfaceSet {
   /** Taskbar on this display, or the screen bottom when there is none. */
   floor: Surface | null = null;
   foregroundId = '';
-  private lastUpdate = 0;
+  /** Time (ms) of the previous snapshot, as stamped by the main process. */
+  private lastSnapshotTime: number | null = null;
+  /** Floor then windows (top-most first); rebuilt on update, read per flake per frame. */
+  private landing: Surface[] = [];
 
   /**
    * Applies a new desktop snapshot. Returns piles that should crumble away.
+   * Window speed uses the snapshot timestamps, not when this renderer got round to handling them.
    * With `canShed: false` (resuming after a pause) windows keep their snow however far they
    * moved, because nobody saw them move.
    */
-  update(state: DesktopState, display: Rect, now: number, canShed = true): ShedEvent[] {
-    const dt = Math.max(0.016, (now - this.lastUpdate) / 1000);
-    this.lastUpdate = now;
+  update(state: DesktopState, display: Rect, canShed = true): ShedEvent[] {
+    const elapsedMs = this.lastSnapshotTime === null ? MAX_SNAPSHOT_GAP_MS : state.time - this.lastSnapshotTime;
+    const dt = Math.max(MIN_SNAPSHOT_GAP_MS, elapsedMs) / 1000;
+    this.lastSnapshotTime = state.time;
     this.foregroundId = state.foregroundId;
     const localDisplay: Rect = { x: 0, y: 0, width: display.width, height: display.height };
     const previous = new Map(this.windows.map((s) => [s.id, s]));
@@ -82,17 +91,18 @@ export class SurfaceSet {
     this.windows = next;
     this.updateFloor(state.bars, display);
     this.computeVisibility(localDisplay);
+    this.landing = this.floor ? [this.floor, ...this.windows] : [...this.windows];
     return sheds;
   }
 
   /** All surfaces flakes may land on, top-most first. */
-  landingOrder(): Surface[] {
-    return this.floor ? [this.floor, ...this.windows] : this.windows;
+  landingOrder(): readonly Surface[] {
+    return this.landing;
   }
 
   /** Finds the surface a particle moving from y0 to y1 at x lands on, if any. */
   findLanding(x: number, y0: number, y1: number, skipId: string | null = null): Surface | null {
-    for (const s of this.landingOrder()) {
+    for (const s of this.landing) {
       if (!s.collects || s.id === skipId) continue;
       const lx = x - s.rect.x;
       if (lx < -s.layer.overhang || lx > s.rect.width + s.layer.overhang) continue;
@@ -133,7 +143,14 @@ export class SurfaceSet {
     const kind: SurfaceKind = local ? 'bar' : 'ground';
     const id = local ? BAR_ID : GROUND_ID;
     if (!this.floor || this.floor.id !== id) {
-      this.floor = { id, kind, rect, layer: new SnowLayer(rect.width, layerOptions(kind)), visible: [], collects: true };
+      this.floor = {
+        id,
+        kind,
+        rect,
+        layer: new SnowLayer(rect.width, layerOptions(kind)),
+        visible: [],
+        collects: true,
+      };
       return;
     }
     this.floor.layer.resize(rect.width);

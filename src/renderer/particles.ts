@@ -85,7 +85,15 @@ export class Particles {
       const a = rand(0, Math.PI * 2);
       const speed = rand(40, 150);
       const maxLife = rand(0.6, 1.2);
-      this.sparkles.push({ x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed - 60, life: maxLife, maxLife, hue: rand(0, 360) });
+      this.sparkles.push({
+        x,
+        y,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed - 60,
+        life: maxLife,
+        maxLife,
+        hue: rand(0, 360),
+      });
     }
   }
 

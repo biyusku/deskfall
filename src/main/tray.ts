@@ -40,15 +40,29 @@ function radioGroup<TValue extends string>(
   }));
 }
 
-function toggle(handlers: TrayHandlers, label: StringKey, key: keyof Settings): MenuItemConstructorOptions {
-  const settings = handlers.getSettings();
-  const value = settings[key];
+/** Only on/off settings can back a checkbox (so an enum like `intensity` can't be flipped to false). */
+type BooleanSettingKey = { [TKey in keyof Settings]: Settings[TKey] extends boolean ? TKey : never }[keyof Settings];
+
+function toggle(handlers: TrayHandlers, label: StringKey, key: BooleanSettingKey): MenuItemConstructorOptions {
+  const value = handlers.getSettings()[key];
+  const patch: Partial<Settings> = {};
+  patch[key] = !value;
   return {
     type: 'checkbox',
     label: handlers.t(label),
-    checked: value === true,
-    click: (): void => handlers.update({ [key]: value !== true }),
+    checked: value,
+    click: (): void => handlers.update(patch),
   };
+}
+
+/** The portable .exe has no fixed install path, so "start with Windows" can't be relied on. */
+const IS_PORTABLE = process.env.PORTABLE_EXECUTABLE_DIR !== undefined;
+
+function platformItems(h: TrayHandlers): MenuItemConstructorOptions[] {
+  const items: MenuItemConstructorOptions[] = [];
+  if (!IS_PORTABLE) items.push(toggle(h, process.platform === 'win32' ? 'login' : 'loginGeneric', 'launchAtLogin'));
+  items.push({ label: h.t(process.platform === 'darwin' ? 'shortcutHintMac' : 'shortcutHint'), enabled: false });
+  return items;
 }
 
 const INTENSITY_OPTIONS: ReadonlyArray<{ value: Intensity; label: StringKey }> = [
@@ -93,8 +107,7 @@ function buildMenu(h: TrayHandlers): Menu {
     { type: 'separator' },
     toggle(h, 'pauseMaximized', 'pauseOnMaximized'),
     toggle(h, 'hideFullscreen', 'hideInFullscreen'),
-    toggle(h, 'login', 'launchAtLogin'),
-    { label: h.t('shortcutHint'), enabled: false },
+    ...platformItems(h),
     { type: 'separator' },
     { label: h.t('quit'), click: (): void => h.quit() },
   ];

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { join } from 'node:path';
+import { join, win32 } from 'node:path';
 import { logger } from './logger';
 
 /** Physical-pixel rectangle as [left, top, right, bottom]. */
@@ -15,9 +15,12 @@ export interface RawSnapshot {
   windows: Array<{ id: string; rect: RawRect }>;
 }
 
-const POLL_INTERVAL_MS = 33;
+const DEFAULT_POLL_INTERVAL_MS = 33;
 const RESTART_DELAY_MS = 2000;
+const MAX_RESTART_DELAY_MS = 60_000;
 const MAX_LINE_LENGTH = 1_000_000;
+const LOG_PREVIEW_CHARS = 200;
+const DEFAULT_SYSTEM_ROOT = 'C:\\Windows';
 
 function isRawRect(value: unknown): value is RawRect {
   return Array.isArray(value) && value.length === 4 && value.every((n) => typeof n === 'number' && Number.isFinite(n));
@@ -59,22 +62,43 @@ export function helperScriptPath(): string {
   return join(__dirname, 'helper', 'winlist.ps1').replace('app.asar', 'app.asar.unpacked');
 }
 
+/** Delay before restarting a helper that failed `failures` times in a row (exponential, capped). */
+export function restartDelay(failures: number): number {
+  return Math.min(MAX_RESTART_DELAY_MS, RESTART_DELAY_MS * 2 ** Math.max(0, failures - 1));
+}
+
+/** Absolute path, so a `powershell.exe` in the working directory can never be picked up instead. */
+export function powershellPath(systemRoot: string | undefined): string {
+  return win32.join(systemRoot ?? DEFAULT_SYSTEM_ROOT, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+}
+
 export class WindowWatcher extends EventEmitter {
   private child: ChildProcessWithoutNullStreams | null = null;
   private buffer = '';
-  private stopped = false;
+  private running = false;
+  private intervalMs = DEFAULT_POLL_INTERVAL_MS;
+  private failures = 0;
   private restartTimer: NodeJS.Timeout | null = null;
 
-  start(): void {
-    this.stopped = false;
-    this.spawnHelper();
+  /** Starts the helper (no-op if running) and sets how often it polls. */
+  start(intervalMs: number = DEFAULT_POLL_INTERVAL_MS): void {
+    const changed = intervalMs !== this.intervalMs;
+    this.intervalMs = intervalMs;
+    if (!this.running) {
+      this.running = true;
+      this.spawnHelper();
+      return;
+    }
+    if (changed) this.child?.stdin.write(`interval ${intervalMs}\n`);
   }
 
   stop(): void {
-    this.stopped = true;
+    this.running = false;
     if (this.restartTimer) clearTimeout(this.restartTimer);
-    this.child?.kill();
+    this.restartTimer = null;
+    const child = this.child;
     this.child = null;
+    child?.kill();
   }
 
   onSnapshot(listener: (snapshot: RawSnapshot) => void): void {
@@ -82,6 +106,7 @@ export class WindowWatcher extends EventEmitter {
   }
 
   private spawnHelper(): void {
+    this.restartTimer = null;
     const args = [
       '-NoProfile',
       '-NonInteractive',
@@ -90,20 +115,34 @@ export class WindowWatcher extends EventEmitter {
       '-File',
       helperScriptPath(),
       String(process.pid),
-      String(POLL_INTERVAL_MS),
+      String(this.intervalMs),
     ];
-    const child = spawn('powershell.exe', args, { windowsHide: true });
+    const child = spawn(powershellPath(process.env.SystemRoot), args, { windowsHide: true });
     this.child = child;
+    this.buffer = '';
+    let failed = false;
+    const onFailure = (reason: string, detail: unknown): void => {
+      if (failed) return;
+      failed = true;
+      this.handleFailure(child, reason, detail);
+    };
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => this.consume(chunk));
     child.stderr.on('data', (chunk: Buffer) => logger.warn('window helper stderr', chunk.toString()));
-    child.on('error', (err) => logger.error('window helper failed to start', err));
-    child.on('exit', (code) => {
-      if (this.child === child) this.child = null;
-      if (this.stopped) return;
-      logger.warn('window helper exited, restarting', { code });
-      this.restartTimer = setTimeout(() => this.spawnHelper(), RESTART_DELAY_MS);
-    });
+    child.stdin.on('error', (err) => logger.warn('window helper stdin closed', err.message));
+    // 'error' (e.g. ENOENT) can fire without 'exit', so both lead to the same restart path.
+    child.on('error', (err) => onFailure('failed to start', err));
+    child.on('exit', (code) => onFailure('exited', { code }));
+  }
+
+  private handleFailure(child: ChildProcessWithoutNullStreams, reason: string, detail: unknown): void {
+    if (this.child === child) this.child = null;
+    if (!this.running) return;
+    this.failures += 1;
+    const delay = restartDelay(this.failures);
+    logger.warn(`window helper ${reason}, restarting`, { detail, failures: this.failures, delayMs: delay });
+    if (this.restartTimer) clearTimeout(this.restartTimer);
+    this.restartTimer = setTimeout(() => this.spawnHelper(), delay);
   }
 
   private consume(chunk: string): void {
@@ -115,8 +154,12 @@ export class WindowWatcher extends EventEmitter {
       this.buffer = this.buffer.slice(newline + 1);
       if (line) {
         const snapshot = parseSnapshot(line);
-        if (snapshot) this.emit('snapshot', snapshot);
-        else logger.warn('malformed window snapshot', line.slice(0, 200));
+        if (snapshot) {
+          this.failures = 0;
+          this.emit('snapshot', snapshot);
+        } else {
+          logger.warn('malformed window snapshot', line.slice(0, LOG_PREVIEW_CHARS));
+        }
       }
       newline = this.buffer.indexOf('\n');
     }

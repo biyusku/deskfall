@@ -114,11 +114,37 @@ public static class DeskfallWindows {
         try { return !Process.GetProcessById((int)pid).HasExited; } catch { return false; }
     }
 
+    const int MIN_INTERVAL_MS = 15;
+    const int MAX_INTERVAL_MS = 2000;
+    static volatile int interval = 33;
+    static volatile bool inputClosed = false;
+
+    // Reads "interval <ms>" commands from stdin; stdin closing means the app is gone.
+    static void ReadCommands() {
+        try {
+            string line;
+            while ((line = Console.In.ReadLine()) != null) {
+                string[] parts = line.Trim().Split(' ');
+                int ms;
+                if (parts.Length == 2 && parts[0] == "interval" && int.TryParse(parts[1], out ms)) {
+                    interval = Math.Max(MIN_INTERVAL_MS, Math.Min(MAX_INTERVAL_MS, ms));
+                }
+            }
+        } catch (Exception) {
+            // Broken pipe: same as end of input.
+        }
+        inputClosed = true;
+    }
+
     public static void Run(uint ownerPid, int intervalMs) {
+        interval = Math.Max(MIN_INTERVAL_MS, Math.Min(MAX_INTERVAL_MS, intervalMs));
+        var reader = new Thread(ReadCommands);
+        reader.IsBackground = true;
+        reader.Start();
         string last = null;
         var watch = Stopwatch.StartNew();
         var stdout = Console.Out;
-        while (true) {
+        while (!inputClosed) {
             if (watch.ElapsedMilliseconds > 2000) {
                 if (!IsAlive(ownerPid)) return;
                 watch.Restart();
@@ -129,7 +155,7 @@ public static class DeskfallWindows {
                 stdout.Flush();
                 last = snap;
             }
-            Thread.Sleep(intervalMs);
+            Thread.Sleep(interval);
         }
     }
 }

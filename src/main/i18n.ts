@@ -29,11 +29,15 @@ const STRINGS = {
     en: 'Pause on screens with a maximized window',
   },
   login: { tr: 'Windows ile başlat', en: 'Start with Windows' },
+  loginGeneric: { tr: 'Oturum açılınca başlat', en: 'Start at login' },
   shortcutHint: { tr: 'Kısayol: Ctrl+Alt+K', en: 'Shortcut: Ctrl+Alt+K' },
+  shortcutHintMac: { tr: 'Kısayol: ⌘⌥K', en: 'Shortcut: ⌘⌥K' },
   quit: { tr: 'Çıkış', en: 'Quit' },
   welcomeTitle: { tr: 'Kar yağmaya başladı ❄', en: 'It is snowing ❄' },
   welcomeBody: {
-    tr: 'Ayarlar için görev çubuğundaki kar tanesine sağ tıklayın. Görev çubuğundaki karı sürükleyerek kartopu yuvarlayın!',
+    tr:
+      'Ayarlar için görev çubuğundaki kar tanesine sağ tıklayın. ' +
+      'Görev çubuğundaki karı sürükleyerek kartopu yuvarlayın!',
     en: 'Right-click the snowflake in the tray for settings. Drag across the snow on the taskbar to roll snowballs!',
   },
 } as const;

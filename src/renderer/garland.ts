@@ -18,7 +18,7 @@ function seedOf(id: string): number {
 }
 
 function wireY(top: number, x: number, left: number): number {
-  const t = (((x - left) % GARLAND.span) + GARLAND.span) % GARLAND.span / GARLAND.span;
+  const t = ((((x - left) % GARLAND.span) + GARLAND.span) % GARLAND.span) / GARLAND.span;
   return top + 2 + GARLAND.sag * 4 * t * (1 - t);
 }
 
@@ -27,7 +27,7 @@ function brightness(time: number, index: number, seed: number): number {
   const cycle = (time + seed) % CHASE_PERIOD;
   if (cycle < CHASE_DURATION) {
     const head = (cycle * 18) % 6;
-    return (index % 6) === Math.floor(head) ? 1 : 0.35;
+    return index % 6 === Math.floor(head) ? 1 : 0.35;
   }
   return 0.55 + 0.45 * Math.sin(time * (1.5 + hash(index + seed) * 2.5) + hash(index * 7 + seed) * 6.28);
 }

@@ -54,6 +54,8 @@ export interface DesktopState {
   /** Taskbars in global DIP coordinates. */
   bars: Rect[];
   foregroundId: string;
+  /** When the main process received this layout (ms, monotonic). Used to measure window speed. */
+  time: number;
 }
 
 export interface OverlayInit {

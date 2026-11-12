@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC, type DesktopState, type DeskfallBridge, type OverlayCommand, type OverlayInit, type Settings } from '../shared/types';
+import {
+  IPC,
+  type DesktopState,
+  type DeskfallBridge,
+  type OverlayCommand,
+  type OverlayInit,
+  type Settings,
+} from '../shared/types';
 
 function listen<TPayload>(channel: string, cb: (payload: TPayload) => void): void {
   ipcRenderer.on(channel, (_event, payload: TPayload) => cb(payload));

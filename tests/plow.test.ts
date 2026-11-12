@@ -14,7 +14,14 @@ function bar(depth: number): Surface {
     maxSlope: 1,
   });
   for (let k = 0; k < depth; k++) for (let x = 0; x < 1920; x += 3) layer.deposit(x, 0.5);
-  return { id: 'bar', kind: 'bar', rect: { x: 0, y: 1032, width: 1920, height: 48 }, layer, visible: [], collects: true };
+  return {
+    id: 'bar',
+    kind: 'bar',
+    rect: { x: 0, y: 1032, width: 1920, height: 48 },
+    layer,
+    visible: [],
+    collects: true,
+  };
 }
 
 /** Scans the taskbar for the x where the plow currently is. */

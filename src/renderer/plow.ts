@@ -22,7 +22,9 @@ const BLADE_RAISE = 5;
 /** True when the taskbar has enough snow on it that the plow should come by. */
 export function needsPlowing(floor: Surface): boolean {
   const { layer } = floor;
-  return layer.averageHeight() > PLOW.triggerAverageHeight || layer.peakHeight() > layer.maxHeight * PLOW.triggerPeakRatio;
+  return (
+    layer.averageHeight() > PLOW.triggerAverageHeight || layer.peakHeight() > layer.maxHeight * PLOW.triggerPeakRatio
+  );
 }
 
 export class Snowplow {
@@ -82,7 +84,13 @@ export class Snowplow {
     this.untilVisit = rand(PLOW.visitMinSeconds, PLOW.visitMaxSeconds);
   }
 
-  update(dt: number, floor: Surface | null, obstacles: ReadonlyArray<Interval>, autoStart: boolean, fx: Particles): void {
+  update(
+    dt: number,
+    floor: Surface | null,
+    obstacles: ReadonlyArray<Interval>,
+    autoStart: boolean,
+    fx: Particles,
+  ): void {
     this.cooldown = Math.max(0, this.cooldown - dt);
     if (!floor || floor.kind !== 'bar') {
       this.state = 'idle';
@@ -101,7 +109,11 @@ export class Snowplow {
     this.puffTimer += dt;
     if (this.puffTimer > PUFF_EVERY) {
       this.puffTimer = 0;
-      fx.puff(floor.rect.x + this.x - this.dir * PLOW.bodyWidth * 0.3, floor.rect.y - BODY_HEIGHT - TRACK_HEIGHT, this.dir);
+      fx.puff(
+        floor.rect.x + this.x - this.dir * PLOW.bodyWidth * 0.3,
+        floor.rect.y - BODY_HEIGHT - TRACK_HEIGHT,
+        this.dir,
+      );
     }
     if (this.state === 'blocked') {
       this.timer -= dt;
@@ -130,7 +142,12 @@ export class Snowplow {
     ctx.scale(this.dir, 1);
     if (this.state !== 'leaving') this.drawMound(ctx);
     const moving = this.state === 'driving' || this.state === 'leaving';
-    drawVehicle(ctx, time, moving ? time * (this.leaving ? PLOW.shooSpeedFactor : 1) : 0, this.leaving ? BLADE_RAISE : 0);
+    drawVehicle(
+      ctx,
+      time,
+      moving ? time * (this.leaving ? PLOW.shooSpeedFactor : 1) : 0,
+      this.leaving ? BLADE_RAISE : 0,
+    );
     ctx.globalAlpha = 0.8;
     ctx.drawImage(sprites.headlight, PLOW.bodyWidth / 2 - 4, -BODY_HEIGHT - TRACK_HEIGHT - 20, 70, 44);
     ctx.globalAlpha = 1;

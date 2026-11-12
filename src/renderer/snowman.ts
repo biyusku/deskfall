@@ -44,6 +44,8 @@ const BOUNCE_DAMPING = 0.3;
 const POP_MS = 450;
 const FACE_FOLLOW = 3;
 const CRUMBLE_RETURN = 0.6;
+/** How far each smile dot is raised (× head radius), by distance from the centre dot. */
+const SMILE_LIFT = [0, 0.015, 0.08] as const;
 
 /** Overshooting ease; clamped at 0 because float rounding gives -2e-16 at t=0 (negative arc radius throws). */
 export function easeOutBack(t: number): number {
@@ -266,7 +268,10 @@ export class SnowmanWorld {
   private centers(stack: Stack, floor: Surface): number[] {
     const ys: number[] = [];
     stack.balls.forEach((b, i) => {
-      const rest = i === 0 ? this.groundCenter(stack.x, b.r, floor) : ys[i - 1] - (stack.balls[i - 1].r + b.r) * SNOWMAN.stackOverlap;
+      const rest =
+        i === 0
+          ? this.groundCenter(stack.x, b.r, floor)
+          : ys[i - 1] - (stack.balls[i - 1].r + b.r) * SNOWMAN.stackOverlap;
       ys.push(rest);
     });
     return ys.map((y, i) => y + stack.balls[i].dropY);
@@ -281,7 +286,8 @@ export class SnowmanWorld {
       if (s.balls.some((b, i) => Math.hypot(x - s.x, y - ys[i]) <= b.r + 4)) return s;
       // The part of the bottom ball buried in the snow counts too.
       if (Math.abs(x - s.x) <= s.balls[0].r && y >= ys[0] && y <= floor.rect.y) return s;
-      if (hatRoom > 0 && Math.abs(x - s.x) < headR && y < (ys.at(-1) ?? 0) && y > (ys.at(-1) ?? 0) - headR - hatRoom) return s;
+      if (hatRoom > 0 && Math.abs(x - s.x) < headR && y < (ys.at(-1) ?? 0) && y > (ys.at(-1) ?? 0) - headR - hatRoom)
+        return s;
     }
     return null;
   }
@@ -305,7 +311,14 @@ export class SnowmanWorld {
 
   // ----- drawing -----
 
-  private drawStack(ctx: CanvasRenderingContext2D, s: Stack, floor: Surface, time: number, now: number, cursor: Cursor | null): void {
+  private drawStack(
+    ctx: CanvasRenderingContext2D,
+    s: Stack,
+    floor: Surface,
+    time: number,
+    now: number,
+    cursor: Cursor | null,
+  ): void {
     const ys = this.centers(s, floor);
     const bottom = s.balls[0];
     const groundY = floor.rect.y - floor.layer.heightAt(s.x - floor.rect.x) * 0.7;
@@ -392,11 +405,11 @@ function drawFace(
   ctx.lineTo(baseX, baseY + R * 0.11);
   ctx.closePath();
   ctx.fill();
-  // Smile
+  // Smile: five coal dots, the outer ones raised so it curves up.
   ctx.fillStyle = coal;
   for (let k = -2; k <= 2; k++) {
     const mx = hx + k * R * 0.14 + f * R * 0.06;
-    const my = hy + R * 0.36 - (Math.abs(k) === 2 ? R * 0.08 : Math.abs(k) === 1 ? R * 0.015 : 0);
+    const my = hy + R * 0.36 - R * SMILE_LIFT[Math.abs(k)];
     ctx.beginPath();
     ctx.arc(mx, my, Math.max(0.8, R * 0.05) * pop, 0, Math.PI * 2);
     ctx.fill();
@@ -463,7 +476,14 @@ function drawButtons(ctx: CanvasRenderingContext2D, bx: number, by: number, R: n
   }
 }
 
-function drawArms(ctx: CanvasRenderingContext2D, bx: number, by: number, R: number, pop: number, waveTime: number): void {
+function drawArms(
+  ctx: CanvasRenderingContext2D,
+  bx: number,
+  by: number,
+  R: number,
+  pop: number,
+  waveTime: number,
+): void {
   ctx.strokeStyle = '#5b3a1e';
   ctx.lineCap = 'round';
   ctx.lineWidth = Math.max(1.2, R * 0.08);

@@ -17,9 +17,11 @@ function snowyWindows(): SurfaceSet {
     ],
     bars: [BAR],
     foregroundId: 'a',
+    time: 0,
   };
-  set.update(state, DISPLAY, 0);
-  for (const w of set.windows) for (let k = 0; k < 20; k++) for (let x = 0; x < w.rect.width; x += 3) w.layer.deposit(x, 1);
+  set.update(state, DISPLAY);
+  for (const w of set.windows)
+    for (let k = 0; k < 20; k++) for (let x = 0; x < w.rect.width; x += 3) w.layer.deposit(x, 1);
   return set;
 }
 

@@ -23,7 +23,11 @@ const FLING_LIFT = 80;
  * Velocity (px/s) for snow brushed by a cursor moving from `last` to `to`: along the cursor's
  * direction, faster for faster moves, never slower than SWIPE.minThrow, plus a small upward pop.
  */
-export function flingVelocity(last: (Point & { t: number }) | null, to: Point, now: number): { vx: number; vy: number } {
+export function flingVelocity(
+  last: (Point & { t: number }) | null,
+  to: Point,
+  now: number,
+): { vx: number; vy: number } {
   if (!last) return { vx: 0, vy: -SWIPE.minThrow };
   const dx = to.x - last.x;
   const dy = to.y - last.y;

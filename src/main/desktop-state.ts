@@ -10,11 +10,13 @@ export function rawToRect(raw: RawRect): Rect {
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
-export function toDesktopState(snapshot: RawSnapshot, toDip: ToDip): DesktopState {
+/** `time` is when the snapshot arrived (ms, monotonic). */
+export function toDesktopState(snapshot: RawSnapshot, toDip: ToDip, time: number): DesktopState {
   return {
     foregroundId: snapshot.foreground,
     bars: snapshot.bars.map((bar) => toDip(rawToRect(bar))),
     windows: snapshot.windows.map((w) => ({ id: w.id, rect: toDip(rawToRect(w.rect)) })),
+    time,
   };
 }
 

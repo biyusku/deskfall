@@ -2,19 +2,26 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({ app: { isReady: (): boolean => false, getPath: (): string => '' } }));
 
-const { parseSnapshot } = await import('../src/main/window-watcher');
+const { parseSnapshot, powershellPath, restartDelay } = await import('../src/main/window-watcher');
 const { parseSettings } = await import('../src/main/settings-store');
-const { barsFromWorkAreas, coversDisplay, coveredDisplays, fillsWorkArea, toDesktopState } = await import(
-  '../src/main/desktop-state'
-);
+const { barsFromWorkAreas, coversDisplay, coveredDisplays, fillsWorkArea, toDesktopState } =
+  await import('../src/main/desktop-state');
 const { detectLanguage } = await import('../src/main/i18n');
 const { DEFAULT_SETTINGS } = await import('../src/shared/types');
 
 describe('parseSnapshot', () => {
   it('parses a helper line', () => {
-    const snap = parseSnapshot(
-      '{"fg":42,"fgDesktop":false,"fgRect":[0,0,1920,1032],"bars":[[0,1032,1920,1080]],"windows":[[42,0,0,1920,1032],[7,10,20,110,220]]}',
-    );
+    const line = JSON.stringify({
+      fg: 42,
+      fgDesktop: false,
+      fgRect: [0, 0, 1920, 1032],
+      bars: [[0, 1032, 1920, 1080]],
+      windows: [
+        [42, 0, 0, 1920, 1032],
+        [7, 10, 20, 110, 220],
+      ],
+    });
+    const snap = parseSnapshot(line);
     expect(snap?.foreground).toBe('42');
     expect(snap?.windows).toHaveLength(2);
     expect(snap?.windows[1]).toEqual({ id: '7', rect: [10, 20, 110, 220] });
@@ -46,11 +53,28 @@ describe('desktop state', () => {
       width: r.width / 2,
       height: r.height / 2,
     });
-    const state = toDesktopState(
-      { foreground: '1', foregroundIsDesktop: false, foregroundRect: null, bars: [], windows: [{ id: '1', rect: [100, 200, 300, 400] }] },
-      half,
-    );
+    const raw = {
+      foreground: '1',
+      foregroundIsDesktop: false,
+      foregroundRect: null,
+      bars: [],
+      windows: [{ id: '1', rect: [100, 200, 300, 400] as const }],
+    };
+    const state = toDesktopState(raw, half, 1234);
     expect(state.windows[0].rect).toEqual({ x: 50, y: 100, width: 100, height: 100 });
+    expect(state.time).toBe(1234);
+  });
+
+  it('should_back_off_exponentially_when_the_window_helper_keeps_failing', () => {
+    expect(restartDelay(1)).toBe(2000);
+    expect(restartDelay(2)).toBe(4000);
+    expect(restartDelay(4)).toBe(16000);
+    expect(restartDelay(50)).toBe(60000);
+  });
+
+  it('should_use_the_absolute_system_powershell_when_spawning_the_helper', () => {
+    expect(powershellPath('C:\\Windows')).toBe('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
+    expect(powershellPath(undefined)).toBe('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
   });
 
   it('detects fullscreen windows', () => {
@@ -65,6 +89,7 @@ describe('desktop state', () => {
     const left = { id: 2, workArea: { x: -1920, y: 0, width: 1920, height: 1032 } };
     const state = {
       foregroundId: 'max',
+      time: 0,
       bars: [],
       windows: [
         { id: 'small', rect: { x: -1500, y: 100, width: 600, height: 400 } },
@@ -85,7 +110,10 @@ describe('desktop state', () => {
 
   it('should_find_the_dock_from_the_work_area_when_no_window_tracker_exists', () => {
     // Arrange: a Mac screen with a 70px Dock at the bottom and a 25px menu bar on top.
-    const display = { bounds: { x: 0, y: 0, width: 1440, height: 900 }, workArea: { x: 0, y: 25, width: 1440, height: 805 } };
+    const display = {
+      bounds: { x: 0, y: 0, width: 1440, height: 900 },
+      workArea: { x: 0, y: 25, width: 1440, height: 805 },
+    };
     // Act
     const bars = barsFromWorkAreas([display]);
     // Assert
@@ -93,7 +121,10 @@ describe('desktop state', () => {
   });
 
   it('should_return_no_floor_when_the_dock_is_hidden', () => {
-    const display = { bounds: { x: 0, y: 0, width: 1440, height: 900 }, workArea: { x: 0, y: 25, width: 1440, height: 875 } };
+    const display = {
+      bounds: { x: 0, y: 0, width: 1440, height: 900 },
+      workArea: { x: 0, y: 25, width: 1440, height: 875 },
+    };
     expect(barsFromWorkAreas([display])).toEqual([]);
   });
 
