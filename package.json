@@ -1,7 +1,7 @@
 {
   "name": "deskfall",
   "productName": "Deskfall",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Snow falls on your desktop and piles up on your windows and taskbar, with holiday lights, a snowplow and snowmen you build with your mouse.",
   "main": "dist/main.js",
   "scripts": {
