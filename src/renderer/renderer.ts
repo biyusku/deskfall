@@ -86,6 +86,8 @@ class Overlay {
   }
 
   private setRunning(running: boolean): void {
+    // Main sends this whenever it resets the window to click-through, so forget any earlier request.
+    this.interactive = false;
     if (running === this.running) return;
     this.running = running;
     if (!running) {

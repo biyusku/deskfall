@@ -1,6 +1,6 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { app, BrowserWindow, globalShortcut, ipcMain, screen, type Display } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain, powerMonitor, screen, type Display } from 'electron';
 import { IPC, type DesktopState, type OverlayCommand, type Rect, type Settings } from '../shared/types';
 import { barsFromWorkAreas, coveredDisplays, fullscreenDisplays, toDesktopState, type ToDip } from './desktop-state';
 import { detectLanguage, translator } from './i18n';
@@ -63,9 +63,21 @@ function syncVisibility(overlay: Overlay): void {
   if (shouldShow && !overlay.win.isVisible()) {
     overlay.win.showInactive();
     overlay.win.setAlwaysOnTop(true, 'screen-saver');
+    resetClickThrough(overlay);
   } else if (!shouldShow && overlay.win.isVisible()) {
     overlay.win.hide();
   }
+}
+
+/**
+ * Windows can drop a hidden window's mouse forwarding (show/hide, sleep, lock), after which the
+ * renderer never sees the cursor over snow and every click falls through. Start again from
+ * click-through and tell the renderer, which re-requests clicks as soon as the cursor is over snow.
+ */
+function resetClickThrough(overlay: Overlay): void {
+  if (overlay.win.isDestroyed()) return;
+  overlay.win.setIgnoreMouseEvents(true, { forward: true });
+  send(overlay, IPC.running, overlay.running === true);
 }
 
 function send(overlay: Overlay, channel: string, payload: unknown): void {
@@ -295,6 +307,9 @@ async function start(): Promise<void> {
   screen.on('display-added', rebuildOverlays);
   screen.on('display-removed', rebuildOverlays);
   screen.on('display-metrics-changed', rebuildOverlays);
+  const resetAll = (): void => overlays.forEach((o) => o.win.isVisible() && resetClickThrough(o));
+  powerMonitor.on('resume', resetAll);
+  powerMonitor.on('unlock-screen', resetAll);
 
   if (HAS_WINDOW_TRACKER) {
     watcher.onSnapshot(handleSnapshot);
