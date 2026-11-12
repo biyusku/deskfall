@@ -1,6 +1,8 @@
 import { DEFAULT_SETTINGS, type DesktopState, type DeskfallBridge, type OverlayCommand, type Rect, type Settings } from '../shared/types';
+import { brushSnow } from './brush';
 import { FLAKES, LAYER, SWIPE, WIND } from './config';
 import { drawSnowCap } from './draw-snow';
+import { clamp } from './geometry';
 import { FlakeField, windAt } from './flakes';
 import { drawGarland } from './garland';
 import { Particles } from './particles';
@@ -176,21 +178,16 @@ class Overlay {
     this.updateInteractive(x, y);
   }
 
-  /** Fast flicks through a window's snow knock it off. */
+  /** Passing the cursor through a window's snow — even slowly — brushes it off. */
   private swipe(x: number, y: number, now: number): void {
-    const dt = now - this.lastPointer.t;
-    if (dt <= 0 || dt > 100 || this.snowmen.busy) return;
-    const vx = (x - this.lastPointer.x) / dt;
-    const vy = (y - this.lastPointer.y) / dt;
-    if (Math.hypot(vx, vy) < SWIPE.speed) return;
-    for (const s of this.surfaces.windows) {
-      if (!s.collects) continue;
-      const lx = x - s.rect.x;
-      const h = s.layer.heightAt(lx);
-      if (h < 1 || y < s.rect.y - h - 3 || y > s.rect.y + 2) continue;
-      const removed = s.layer.take(lx - SWIPE.radius, lx + SWIPE.radius, 0);
-      if (removed > 0) this.particles.burst(x, s.rect.y - h / 2, vx * 250, vy * 250 - 60, Math.ceil(removed / 2));
-      return;
+    if (this.snowmen.busy) return;
+    const last = this.lastPointer.t > 0 ? this.lastPointer : null;
+    const hits = brushSnow(this.surfaces.windows, last, { x, y });
+    if (hits.length === 0) return;
+    const dt = last ? Math.max(1, now - last.t) : 16;
+    const vx = last ? clamp((x - last.x) / dt, -2, 2) : 0;
+    for (const hit of hits) {
+      this.particles.burst(hit.x, hit.y, vx * SWIPE.throwFactor, -40, Math.max(1, Math.ceil(hit.removed / 2.5)));
     }
   }
 

@@ -106,7 +106,17 @@ export const SNOWMAN = {
   waveDistance: 110,
 } as const;
 
+/** Brushing snow off windows with the cursor. */
 export const SWIPE = {
-  speed: 2.4,
-  radius: 12,
+  /** Half-width (px) of snow cleared around the cursor. */
+  radius: 11,
+  /** Extra px around the pile that still counts as touching it. */
+  padding: 4,
+  minHeight: 0.5,
+  /** Distance between sampled points along the cursor path. */
+  sampleStep: 6,
+  /** Longer jumps (e.g. coming from another screen) only brush at the end point. */
+  maxSegment: 250,
+  /** How strongly chunks follow the cursor's direction. */
+  throwFactor: 180,
 } as const;
